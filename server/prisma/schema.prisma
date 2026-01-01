@@ -1,0 +1,239 @@
+// Prisma Schema for KinkyForex
+// USDT Trading Profit Tracking Application
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// USER MANAGEMENT
+// ─────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String?
+  name          String?
+  avatar        String?
+  provider      AuthProvider @default(EMAIL)
+  providerId    String?
+  emailVerified Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  workspaceMembers WorkspaceMember[]
+  invitations      Invitation[]      @relation("InvitedBy")
+  receivedInvites  Invitation[]      @relation("InvitedUser")
+
+  @@index([email])
+  @@index([provider, providerId])
+}
+
+enum AuthProvider {
+  EMAIL
+  GOOGLE
+  APPLE
+}
+
+// ─────────────────────────────────────────────────────────────────
+// WORKSPACE (Data Isolation)
+// ─────────────────────────────────────────────────────────────────
+
+model Workspace {
+  id          String        @id @default(uuid())
+  name        String
+  type        WorkspaceType @default(SOLE_TRADER)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  members     WorkspaceMember[]
+  cards       Card[]
+  transactions Transaction[]
+  settings    WorkspaceSettings?
+  invitations Invitation[]
+
+  @@index([type])
+}
+
+enum WorkspaceType {
+  SOLE_TRADER
+  PARTNERSHIP
+}
+
+model WorkspaceMember {
+  id           String   @id @default(uuid())
+  userId       String
+  workspaceId  String
+  role         MemberRole @default(MEMBER)
+  profitSplit  Decimal  @default(100) @db.Decimal(5, 2) // Percentage (0-100)
+  isOwner      Boolean  @default(false)
+  joinedAt     DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+  @@index([userId])
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+// ─────────────────────────────────────────────────────────────────
+// CARDS
+// ─────────────────────────────────────────────────────────────────
+
+model Card {
+  id          String   @id @default(uuid())
+  workspaceId String
+  name        String
+  usdLimit    Decimal  @db.Decimal(12, 2)
+  isActive    Boolean  @default(true)
+  color       String?  @default("#3B82F6") // Card color for UI
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, isActive])
+}
+
+// ─────────────────────────────────────────────────────────────────
+// TRANSACTIONS (Sales)
+// ─────────────────────────────────────────────────────────────────
+
+model Transaction {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  cardId       String
+  
+  // Transaction Details
+  usdUsed      Decimal  @db.Decimal(12, 2)  // USD limit used
+  usdtReceived Decimal  @db.Decimal(18, 8)  // USDT received
+  buyRate      Decimal  @db.Decimal(10, 4)  // USD to MVR rate (cost calculation)
+  sellRate     Decimal  @db.Decimal(10, 4)  // USDT to MVR rate (sale calculation)
+  site         String?                       // Exchange/site used
+  notes        String?
+  
+  // Computed Values (stored server-side)
+  cost         Decimal  @db.Decimal(18, 2)  // USD used * buy rate
+  sale         Decimal  @db.Decimal(18, 2)  // USDT received * sell rate
+  profit       Decimal  @db.Decimal(18, 2)  // Sale - Cost
+  
+  // Status
+  status       TransactionStatus @default(COMPLETED)
+  
+  // Timestamps
+  transactionDate DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  card      Card      @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId])
+  @@index([workspaceId, transactionDate])
+  @@index([cardId])
+  @@index([workspaceId, status])
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+// ─────────────────────────────────────────────────────────────────
+// WORKSPACE SETTINGS
+// ─────────────────────────────────────────────────────────────────
+
+model WorkspaceSettings {
+  id             String   @id @default(uuid())
+  workspaceId    String   @unique
+  
+  // Default Rates
+  defaultBuyRate  Decimal @db.Decimal(10, 4) @default(15.42) // USD to MVR
+  defaultSellRate Decimal @db.Decimal(10, 4) @default(15.50) // USDT to MVR
+  
+  // UI Preferences
+  theme          Theme    @default(SYSTEM)
+  currency       String   @default("MVR")
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+enum Theme {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
+// ─────────────────────────────────────────────────────────────────
+// INVITATIONS
+// ─────────────────────────────────────────────────────────────────
+
+model Invitation {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  email        String
+  invitedById  String
+  invitedUserId String?
+  profitSplit  Decimal  @db.Decimal(5, 2) @default(50)
+  token        String   @unique @default(uuid())
+  status       InvitationStatus @default(PENDING)
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy   User      @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+  invitedUser User?     @relation("InvitedUser", fields: [invitedUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([email])
+  @@index([token])
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+// ─────────────────────────────────────────────────────────────────
+// REFRESH TOKENS (for JWT refresh)
+// ─────────────────────────────────────────────────────────────────
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
