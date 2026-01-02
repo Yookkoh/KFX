@@ -4,32 +4,37 @@ import { config } from '../config/index.js';
 import prisma from '../config/database.js';
 import type { JwtPayload, TokenPair } from '../types/index.js';
 
-// Parse duration string to milliseconds
-function parseDuration(duration: string): number {
+// Parse duration string to seconds (for JWT)
+function parseDurationSeconds(duration: string): number {
   const match = duration.match(/^(\d+)([smhd])$/);
-  if (!match) return 15 * 60 * 1000; // default 15 minutes
+  if (!match) return 15 * 60; // default 15 minutes
   
   const value = parseInt(match[1], 10);
   const unit = match[2];
   
   switch (unit) {
-    case 's': return value * 1000;
-    case 'm': return value * 60 * 1000;
-    case 'h': return value * 60 * 60 * 1000;
-    case 'd': return value * 24 * 60 * 60 * 1000;
-    default: return 15 * 60 * 1000;
+    case 's': return value;
+    case 'm': return value * 60;
+    case 'h': return value * 60 * 60;
+    case 'd': return value * 24 * 60 * 60;
+    default: return 15 * 60;
   }
+}
+
+// Parse duration string to milliseconds (for refresh token)
+function parseDurationMs(duration: string): number {
+  return parseDurationSeconds(duration) * 1000;
 }
 
 export function generateAccessToken(payload: JwtPayload): string {
   return jwt.sign(payload, config.jwtSecret, {
-    expiresIn: config.jwtExpiresIn,
+    expiresIn: parseDurationSeconds(config.jwtExpiresIn),
   });
 }
 
 export async function generateRefreshToken(userId: string): Promise<string> {
   const token = uuidv4();
-  const expiresAt = new Date(Date.now() + parseDuration(config.refreshTokenExpiresIn));
+  const expiresAt = new Date(Date.now() + parseDurationMs(config.refreshTokenExpiresIn));
   
   // Store refresh token in database
   await prisma.refreshToken.create({
