@@ -1,21 +1,20 @@
-import { User, Workspace, WorkspaceMember, Card, Transaction, WorkspaceSettings } from '@prisma/client';
-
-// Express Request Extensions
-declare global {
-  namespace Express {
-    interface Request {
-      user?: AuthUser;
-      workspace?: Workspace;
-      workspaceMember?: WorkspaceMember;
-    }
-  }
-}
+import { Workspace, WorkspaceMember, Card, Transaction, WorkspaceSettings } from '@prisma/client';
+import { User as PrismaUser } from '@prisma/client';
 
 // Auth Types
 export interface AuthUser {
   id: string;
   email: string;
   name: string | null;
+}
+
+// Augment Express namespace - must use module augmentation
+declare module 'express-serve-static-core' {
+  interface Request {
+    user?: AuthUser;
+    workspace?: Workspace;
+    workspaceMember?: WorkspaceMember;
+  }
 }
 
 export interface JwtPayload {
@@ -136,7 +135,7 @@ export interface ExportFilters {
 }
 
 export type {
-  User,
+  PrismaUser as User,
   Workspace,
   WorkspaceMember,
   Card,
