@@ -35,6 +35,9 @@ import {
 import { useAuthStore } from '@/stores';
 import { formatDate, formatPercentage, getInitials, getRoleColor, cn } from '@/lib/utils';
 
+// Validation schemas for invite and split forms. These schemas describe the
+// shape of valid form submissions and are used both for client-side
+// validation and to derive TypeScript types (below) via z.infer.
 const inviteSchema = z.object({
   email: z.string().email('Invalid email address'),
 });
@@ -42,6 +45,12 @@ const inviteSchema = z.object({
 const splitSchema = z.object({
   profitSplitPercentage: z.number().min(0).max(100),
 });
+
+// Derive form data types from the Zod schemas. This ensures that the
+// corresponding useForm instances are correctly typed and that the
+// onSubmit callbacks receive objects that match the schema definitions.
+type InviteFormData = z.infer<typeof inviteSchema>;
+type SplitFormData = z.infer<typeof splitSchema>;
 
 export function PartnersPage() {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
@@ -61,7 +70,8 @@ export function PartnersPage() {
 
   const pendingInvitations = invitations?.filter((i) => i.status === 'PENDING') || [];
 
-  const handleInvite = async (data: { email: string }) => {
+  const handleInvite = async (data: InviteFormData) => {
+    // Because useForm is typed with InviteFormData, `data.email` is known to be a string.
     await inviteMutation.mutateAsync(data.email);
     setIsInviteOpen(false);
   };
@@ -70,7 +80,7 @@ export function PartnersPage() {
     await cancelMutation.mutateAsync(invitationId);
   };
 
-  const handleUpdateSplit = async (data: { profitSplitPercentage: number }) => {
+  const handleUpdateSplit = async (data: SplitFormData) => {
     if (editingSplit) {
       await updateSplitMutation.mutateAsync({
         memberId: editingSplit.memberId,
@@ -369,7 +379,7 @@ function InviteForm({
   isLoading,
   onCancel,
 }: {
-  onSubmit: (data: { email: string }) => Promise<void>;
+  onSubmit: (data: InviteFormData) => Promise<void>;
   isLoading: boolean;
   onCancel: () => void;
 }) {
@@ -377,7 +387,7 @@ function InviteForm({
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm({
+  } = useForm<InviteFormData>({
     resolver: zodResolver(inviteSchema),
   });
 
@@ -422,7 +432,7 @@ function SplitForm({
   onCancel,
 }: {
   currentSplit: number;
-  onSubmit: (data: { profitSplitPercentage: number }) => Promise<void>;
+  onSubmit: (data: SplitFormData) => Promise<void>;
   isLoading: boolean;
   onCancel: () => void;
 }) {
@@ -430,7 +440,7 @@ function SplitForm({
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm({
+  } = useForm<SplitFormData>({
     resolver: zodResolver(splitSchema),
     defaultValues: {
       profitSplitPercentage: currentSplit,

@@ -13,9 +13,7 @@ export function formatCurrency(
   locale: string = 'en-US'
 ): string {
   const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-  
   if (isNaN(numAmount)) return `${currency} 0.00`;
-  
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: currency === 'MVR' ? 'USD' : currency,
@@ -30,9 +28,7 @@ export function formatNumber(
   decimals: number = 2
 ): string {
   const numValue = typeof value === 'string' ? parseFloat(value) : value;
-  
   if (isNaN(numValue)) return '0';
-  
   return new Intl.NumberFormat('en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
@@ -42,9 +38,7 @@ export function formatNumber(
 // Format percentage
 export function formatPercentage(value: number | string): string {
   const numValue = typeof value === 'string' ? parseFloat(value) : value;
-  
   if (isNaN(numValue)) return '0%';
-  
   return `${numValue.toFixed(1)}%`;
 }
 
@@ -54,7 +48,6 @@ export function formatDate(
   format: 'short' | 'long' | 'month-year' = 'short'
 ): string {
   const d = new Date(date);
-  
   switch (format) {
     case 'long':
       return d.toLocaleDateString('en-US', {
@@ -83,12 +76,10 @@ export function formatRelativeTime(date: string | Date): string {
   const now = new Date();
   const d = new Date(date);
   const diffInSeconds = Math.floor((now.getTime() - d.getTime()) / 1000);
-  
   if (diffInSeconds < 60) return 'Just now';
   if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
   if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
-  
   return formatDate(date);
 }
 
@@ -173,8 +164,14 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout | null = null;
-  
+  /**
+   * Use `ReturnType<typeof setTimeout>` instead of `NodeJS.Timeout` so that
+   * TypeScript does not require Node types to be present. This works both
+   * in browser and Node environments and avoids the "Cannot find namespace
+   * 'NodeJS'" error during compilation.
+   */
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+
   return (...args: Parameters<T>) => {
     if (timeout) clearTimeout(timeout);
     timeout = setTimeout(() => func(...args), wait);
